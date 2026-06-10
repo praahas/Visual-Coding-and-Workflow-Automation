@@ -1,0 +1,227 @@
+services:
+
+  # ── PostgreSQL ─────────────────────────────────────────────────────
+  # Each service gets its own database - no sharing, no conflicts
+  postgres:
+    image: postgres:15-alpine
+    container_name: lcnc_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: lcncadmin
+      POSTGRES_PASSWORD: lcncpass123
+      POSTGRES_DB: postgres
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    ports:
+      - "5432:5432"
+    networks:
+      - lcnc_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lcncadmin -d postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # ── NocoDB ─────────────────────────────────────────────────────────
+  # Database: nocodb (dedicated)
+  # URL: http://localhost:8080
+  nocodb:
+    image: nocodb/nocodb:latest
+    container_name: lcnc_nocodb
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NC_DB: "pg://postgres:5432?u=lcncadmin&p=lcncpass123&d=nocodb"
+      NC_AUTH_JWT_SECRET: "nocodb-jwt-secret-lcnc-lab-2024"
+      NC_PUBLIC_URL: "http://localhost:8080"
+      NC_DISABLE_TELE: "true"
+    ports:
+      - "8080:8080"
+    volumes:
+      - nocodb_data:/usr/app/data
+    networks:
+      - lcnc_network
+
+  # ── Appsmith ───────────────────────────────────────────────────────
+  # Uses its own internal MongoDB - no postgres dependency
+  # URL: http://localhost:8081
+  appsmith:
+    image: index.docker.io/appsmith/appsmith-ce:latest
+    container_name: lcnc_appsmith
+    restart: unless-stopped
+    ports:
+      - "8081:80"
+      - "8443:443"
+    volumes:
+      - appsmith_data:/appsmith-stacks
+    networks:
+      - lcnc_network
+
+  # ── n8n ────────────────────────────────────────────────────────────
+  # Database: n8ndb (dedicated)
+  # URL: http://localhost:5678  login: admin / admin123
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: lcnc_n8n
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DB_TYPE: postgresdb
+      DB_POSTGRESDB_HOST: postgres
+      DB_POSTGRESDB_PORT: 5432
+      DB_POSTGRESDB_DATABASE: n8ndb
+      DB_POSTGRESDB_USER: lcncadmin
+      DB_POSTGRESDB_PASSWORD: lcncpass123
+      N8N_BASIC_AUTH_ACTIVE: "true"
+      N8N_BASIC_AUTH_USER: "admin"
+      N8N_BASIC_AUTH_PASSWORD: "admin123"
+      N8N_HOST: "localhost"
+      N8N_PORT: 5678
+      N8N_PROTOCOL: "http"
+      WEBHOOK_URL: "http://localhost:5678"
+      GENERIC_TIMEZONE: "Asia/Kolkata"
+      N8N_EDITOR_BASE_URL: "http://localhost:5678"
+    ports:
+      - "5678:5678"
+    volumes:
+      - n8n_data:/home/node/.n8n
+    networks:
+      - lcnc_network
+
+  # ── Formbricks ─────────────────────────────────────────────────────
+  # Database: formbricksdb (dedicated)
+  # URL: http://localhost:3000
+  formbricks:
+    image: ghcr.io/formbricks/formbricks:v2.3.1
+    container_name: lcnc_formbricks
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: "postgresql://lcncadmin:lcncpass123@postgres:5432/formbricksdb"
+      NEXTAUTH_SECRET: "lcnclabsecret1234567890abcdefgh"
+      NEXTAUTH_URL: "http://localhost:3000"
+      ENCRYPTION_KEY: "12345678901234567890123456789012"
+      CRON_SECRET: "lcnclab-cron-secret-1234567890ab"
+      EMAIL_VERIFICATION_DISABLED: "1"
+      SIGNUP_DISABLED: "0"
+      TELEMETRY_DISABLED: "1"
+    ports:
+      - "3000:3000"
+    networks:
+      - lcnc_network
+
+  # ── Node-RED ───────────────────────────────────────────────────────
+  # Uses local file storage - no postgres dependency
+  # URL: http://localhost:1880
+  nodered:
+    image: nodered/node-red:latest
+    container_name: lcnc_nodered
+    restart: unless-stopped
+    environment:
+      TZ: "Asia/Kolkata"
+    ports:
+      - "1880:1880"
+    volumes:
+      - nodered_data:/data
+    networks:
+      - lcnc_network
+
+  # ── Metabase ───────────────────────────────────────────────────────
+  # Database: metabasedb (dedicated)
+  # URL: http://localhost:3001
+  metabase:
+    image: metabase/metabase:latest
+    container_name: lcnc_metabase
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      MB_DB_TYPE: postgres
+      MB_DB_DBNAME: metabasedb
+      MB_DB_PORT: 5432
+      MB_DB_USER: lcncadmin
+      MB_DB_PASS: lcncpass123
+      MB_DB_HOST: postgres
+      JAVA_TIMEZONE: "Asia/Kolkata"
+    ports:
+      - "3001:3000"
+    volumes:
+      - metabase_data:/metabase-data
+    networks:
+      - lcnc_network
+
+  # ── Flowise ────────────────────────────────────────────────────────
+  # Database: flowisedb (dedicated)
+  # URL: http://localhost:3002  login: admin / admin123
+  flowise:
+    image: flowiseai/flowise:latest
+    container_name: lcnc_flowise
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PORT: 3002
+      FLOWISE_USERNAME: "admin"
+      FLOWISE_PASSWORD: "admin123"
+      DATABASE_TYPE: postgres
+      DATABASE_HOST: postgres
+      DATABASE_PORT: 5432
+      DATABASE_NAME: flowisedb
+      DATABASE_USER: lcncadmin
+      DATABASE_PASSWORD: lcncpass123
+    ports:
+      - "3002:3002"
+    volumes:
+      - flowise_data:/root/.flowise
+    networks:
+      - lcnc_network
+
+  # ── Ollama ─────────────────────────────────────────────────────────
+  # Local LLM runtime for Lab 8
+  # API: http://localhost:11434
+  ollama:
+    image: ollama/ollama:latest
+    container_name: lcnc_ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    networks:
+      - lcnc_network
+
+  # ── Mailpit ────────────────────────────────────────────────────────
+  # Local email testing - no postgres dependency
+  # Inbox: http://localhost:8025
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: lcnc_mailpit
+    restart: unless-stopped
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+    networks:
+      - lcnc_network
+
+volumes:
+  postgres_data:
+  nocodb_data:
+  appsmith_data:
+  n8n_data:
+  nodered_data:
+  metabase_data:
+  flowise_data:
+  ollama_data:
+
+networks:
+  lcnc_network:
+    driver: bridge
