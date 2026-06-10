@@ -57,7 +57,7 @@ echo      Extensions applied. OK
 echo.
 
 echo [4/6] Starting all remaining services...
-docker compose up -d
+docker compose up -d --remove-orphans
 echo      All services started.
 echo.
 

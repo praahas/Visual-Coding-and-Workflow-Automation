@@ -126,10 +126,13 @@ docker exec lcnc_postgres psql -U lcncadmin -d lcnclab -c "CREATE EXTENSION IF N
 echo        Extensions applied. OK
 echo.
 
-:: ── Step 3: Start the full lab stack ────────────────────────────────
+:: ── Step 3: Remove any stale containers then start fresh ────────────
 echo [3/4] Starting all lab services...
+echo        Removing any stale containers...
+docker rm -f lcnc_postgres lcnc_nocodb lcnc_appsmith lcnc_n8n lcnc_formbricks lcnc_nodered lcnc_metabase lcnc_flowise lcnc_ollama lcnc_mailpit >nul 2>&1
+echo        Starting all services...
 echo.
-docker compose up -d
+docker compose up -d --remove-orphans
 echo.
 
 :: ── Step 4: Wait then show status ───────────────────────────────────
